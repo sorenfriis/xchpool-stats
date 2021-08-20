@@ -5,6 +5,7 @@ import sys
 import requests
 import json
 from datetime import datetime, timedelta
+import argparse
 
 
 class Error(Exception):
@@ -93,66 +94,123 @@ def format_bytes(bytes):
     return f'{bytes} B'
 
 
+class stats:
+    def __init__(self, price):
+        self.price = price
+
+    def print(self):
+        print(f'Total netspace             : {format_bytes(self.total_space)}')
+        print(f'Pool netspace              : {format_bytes(self.pool_space)}')
+        print(f'Expected blocks today      : {self.expected_blocks_today:8.2f}')
+        print(f'Expected blocks until now  : {self.expected_blocks_now:8.2f}')
+        print(f'Actual blocks until now    : {self.blocks_today:8}')
+
+        diff = self.blocks_today - self.expected_blocks_now
+        if diff >= 0:
+            ahead_behind = colored('ahead', colored.GREEN)
+        else:
+            ahead_behind = colored('behind', colored.RED)
+
+        print(f'Blocks ahead / behind      : {diff:8.2f} ({ahead_behind})')
+        print('')
+        print(f'Points                     : {self.points:8}')
+        print(f'Estimated member netspace  : {format_bytes(self.member_netspace)}')
+        print(f'Poolshare                  : {(self.poolshare*100):8.6f} %')
+        print('')
+        print(f'Current price              : {self.price:8.2f} USD / XCH')
+        print(f'Next payout until now      : '
+              f'{self.payout_until_now:8.6f} XCH ({self.payout_until_now * self.price:.2f} USD)')
+        print(f'Expected next payout       : '
+              f'{self.expected_next_payout:8.6f} XCH ({self.expected_next_payout * self.price:.2f} USD)')
+        print(f'Estimated profitability    : {self.profitability:8.6f} XCH / TiB')
+
+    def log(self, file):
+        if not os.path.isfile(file):
+            header = [
+                'Time',
+                'Total netspace',
+                'Pool netspace',
+                'Expected blocks today',
+                'Expected blocks until now',
+                'Actual blocks until now',
+                'Ahead / behind',
+                'Points',
+                'Estimated member netspace',
+                'Poolshare',
+                'Current price',
+                'Next payout until now',
+                'Expected next payout'
+            ]
+            with open(file, 'w') as f:
+                f.writelines(h + ';' for h in header)
+                f.write('\n')
+
+        data = [
+            self.time,
+            self.total_space,
+            self.pool_space,
+            self.expected_blocks_today,
+            self.expected_blocks_now,
+            self.blocks_today,
+            self.blocks_today - self.expected_blocks_now,
+            self.points,
+            self.member_netspace,
+            self.poolshare,
+            self.price,
+            self.payout_until_now,
+            self.expected_next_payout
+        ]
+        with open(file, 'a') as f:
+            f.writelines(str(d) + ';' for d in data)
+            f.write('\n')
+
+
 def xchpool_stats(launcher_id):
+    member_data = get_member_data(launcher_id)
+    pool_stats = get_pool_stats()
+    price = get_current_price()
+
+    s = stats(price)
+    s.total_space = pool_stats['blockchainTotalSpace']
+    s.pool_space = pool_stats['poolCapacityBytes']
+    s.blocks_today = pool_stats['blocksFoundSofarToday']
+    s.expected_blocks_today = 4608 * s.pool_space / s.total_space
+
     now = datetime.utcnow()
+    s.time = int(now.timestamp())
     last_calc_time = now.replace(hour=12, minute=0, second=0, microsecond=0)
     if last_calc_time > now:
         one_day = timedelta(hours=24)
         last_calc_time -= one_day
 
-    member_data = get_member_data(launcher_id)
-    pool_stats = get_pool_stats()
-    price = get_current_price()
-
-    total_space = pool_stats['blockchainTotalSpace']
-    pool_space = pool_stats['poolCapacityBytes']
-    blocks_today = pool_stats['blocksFoundSofarToday']
-    expected_blocks_today = 4608 * pool_space / total_space
-
     time_since_last_calc = now - last_calc_time
     time_since_last_calc_secs = time_since_last_calc.total_seconds()
     secs_pr_day = 24*60*60
-    expected_blocks_now = expected_blocks_today * \
-        time_since_last_calc_secs / secs_pr_day
+    s.expected_blocks_now = s.expected_blocks_today * time_since_last_calc_secs / secs_pr_day
 
-    diff = blocks_today - expected_blocks_now
-    if diff >= 0:
-        ahead_behind = colored('ahead', colored.GREEN)
-    else:
-        ahead_behind = colored('behind', colored.RED)
-
-    points = get_points(member_data)
-    poolshare = get_pool_share(member_data)
-    member_netspace = get_member_netspace(member_data)
-    payout_until_now = poolshare * blocks_today * 1.75
+    s.points = get_points(member_data)
+    s.poolshare = get_pool_share(member_data)
+    s.member_netspace = get_member_netspace(member_data)
+    s.payout_until_now = s.poolshare * s.blocks_today * 1.75
 
     time_remaining_days = 1 - (time_since_last_calc_secs / secs_pr_day)
-    expected_remaining_payout = time_remaining_days * expected_blocks_today * 1.75 * poolshare
-    expected_next_payout = payout_until_now + expected_remaining_payout
+    expected_remaining_payout = time_remaining_days * s.expected_blocks_today * 1.75 * s.poolshare
+    s.expected_next_payout = s.payout_until_now + expected_remaining_payout
+    s.profitability = 1024**4 * s.expected_next_payout / s.member_netspace
+    return s
 
-    profitability = 1024**4 * expected_next_payout / member_netspace
-
-    print(f'Total netspace             : {format_bytes(total_space)}')
-    print(f'Pool space                 : {format_bytes(pool_space)}')
-
-    print(f'Expected blocks today      : {expected_blocks_today:8.2f}')
-    print(f'Expected blocks until now  : {expected_blocks_now:8.2f}')
-    print(f'Actual blocks until now    : {blocks_today:8}')
-    print(f'Blocks ahead / behind      : {diff:8.2f} ({ahead_behind})')
-    print('')
-    print(f'Points                     : {points:8}')
-    print(f'Estimated member netspace  : {format_bytes(member_netspace)}')
-    print(f'Poolshare                  : {(poolshare*100):8.6f} %')
-    print('')
-    print(f'Current price              : {price:8.2f} USD / XCH')
-    print(f'Next payout until now      : {payout_until_now:8.6f} XCH ({payout_until_now*price:.2f} USD)')
-    print(f'Expected next payout       : {expected_next_payout:8.6f} XCH ({expected_next_payout*price:.2f} USD)')
-    print(f'Estimated profitability    : {profitability:8.6f} XCH / TiB')
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Extract metrics from XCHPool and calculate expected next payout')
+    parser.add_argument('--log', dest='logfile', help='Log to LOGFILE')
+    args = parser.parse_args()
     try:
         launcher_id = read_launcher_id()
-        xchpool_stats(launcher_id)
+        stats = xchpool_stats(launcher_id)
     except Error as e:
         print("Error:", e)
         sys.exit(1)
+
+    stats.print()
+    if args.logfile:
+        stats.log(args.logfile)
