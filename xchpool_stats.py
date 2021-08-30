@@ -130,6 +130,8 @@ def xchpool_stats(launcher_id):
     expected_remaining_payout = time_remaining_days * expected_blocks_today * 1.75 * poolshare
     expected_next_payout = payout_until_now + expected_remaining_payout
 
+    profitability = 1024**4 * expected_next_payout / member_netspace
+
     print(f'Total netspace             : {format_bytes(total_space)}')
     print(f'Pool space                 : {format_bytes(pool_space)}')
 
@@ -143,11 +145,9 @@ def xchpool_stats(launcher_id):
     print(f'Poolshare                  : {(poolshare*100):8.6f} %')
     print('')
     print(f'Current price              : {price:8.2f} USD / XCH')
-    print(
-        f'Next payout until now      : {payout_until_now:8.6f} XCH ({payout_until_now*price:.2f} USD)')
-    print(
-        f'Expected next payout       : {expected_next_payout:8.6f} XCH ({expected_next_payout*price:.2f} USD)')
-
+    print(f'Next payout until now      : {payout_until_now:8.6f} XCH ({payout_until_now*price:.2f} USD)')
+    print(f'Expected next payout       : {expected_next_payout:8.6f} XCH ({expected_next_payout*price:.2f} USD)')
+    print(f'Estimated profitability    : {profitability:8.6f} XCH / TiB')
 
 if __name__ == "__main__":
     try:

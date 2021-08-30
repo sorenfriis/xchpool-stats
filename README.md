@@ -27,4 +27,5 @@ Poolshare                  : 0.010345 %
 Current price              :   247.09 USD / XCH
 Next payout until now      : 0.001991 XCH (0.49 USD)
 Expected next payout       : 0.006985 XCH (1.73 USD)
+Estimated profitability    : 0.000171 XCH / TiB
 ```
