@@ -8,7 +8,13 @@ Add your Launcher ID to `config.json`. \
 
 ## Usage
 ```
-python3 xchpool_stats.py
+usage: xchpool_stats.py [-h] [--log LOGFILE]
+
+Extract metrics from XCHPool and calculate expected next payout
+
+optional arguments:
+  -h, --help     show this help message and exit
+  --log LOGFILE  Log to LOGFILE
 ```
 
 ## Example output
