@@ -198,7 +198,9 @@ def xchpool_stats(launcher_id):
 
     now = datetime.utcnow()
     s.time = int(now.timestamp())
-    last_calc_time = now.replace(hour=12, minute=0, second=0, microsecond=0)
+    last_calc_hour = round_time_hours * (now.hour // round_time_hours)
+    last_calc_time = now.replace(hour=last_calc_hour, minute=0, second=0, microsecond=0)
+
     if last_calc_time > now:
         one_round = timedelta(hours=round_time_hours)
         last_calc_time -= one_round
