@@ -7,6 +7,7 @@ import json
 from datetime import datetime, timedelta
 import argparse
 
+round_time_hours = 6
 
 class Error(Exception):
     pass
@@ -101,11 +102,11 @@ class stats:
     def print(self):
         print(f'Total netspace             : {format_bytes(self.total_space)}')
         print(f'Pool netspace              : {format_bytes(self.pool_space)}')
-        print(f'Expected blocks today      : {self.expected_blocks_today:8.2f}')
+        print(f'Expected blocks this round : {self.expected_blocks_this_round:8.2f}')
         print(f'Expected blocks until now  : {self.expected_blocks_now:8.2f}')
-        print(f'Actual blocks until now    : {self.blocks_today:8}')
+        print(f'Actual blocks until now    : {self.blocks_this_round:8}')
 
-        diff = self.blocks_today - self.expected_blocks_now
+        diff = self.blocks_this_round - self.expected_blocks_now
         if diff >= 0:
             ahead_behind = colored('ahead', colored.GREEN)
         else:
@@ -130,7 +131,7 @@ class stats:
                 'Time',
                 'Total netspace',
                 'Pool netspace',
-                'Expected blocks today',
+                'Expected blocks this round',
                 'Expected blocks until now',
                 'Actual blocks until now',
                 'Ahead / behind',
@@ -149,10 +150,10 @@ class stats:
             self.time,
             self.total_space,
             self.pool_space,
-            self.expected_blocks_today,
+            self.expected_blocks_this_round,
             self.expected_blocks_now,
-            self.blocks_today,
-            self.blocks_today - self.expected_blocks_now,
+            self.blocks_this_round,
+            self.blocks_this_round - self.expected_blocks_now,
             self.points,
             self.member_netspace,
             self.poolshare,
@@ -173,30 +174,30 @@ def xchpool_stats(launcher_id):
     s = stats(price)
     s.total_space = pool_stats['blockchainTotalSpace']
     s.pool_space = pool_stats['poolCapacityBytes']
-    s.blocks_today = pool_stats['blocksFoundSofarToday']
-    s.expected_blocks_today = 4608 * s.pool_space / s.total_space
+    s.blocks_this_round = pool_stats['blocksFoundSofarToday']
+    s.expected_blocks_this_round = 4608 * round_time_hours/24 * s.pool_space / s.total_space
 
     now = datetime.utcnow()
     s.time = int(now.timestamp())
     last_calc_time = now.replace(hour=12, minute=0, second=0, microsecond=0)
     if last_calc_time > now:
-        one_day = timedelta(hours=24)
-        last_calc_time -= one_day
+        one_round = timedelta(hours=round_time_hours)
+        last_calc_time -= one_round
 
     time_since_last_calc = now - last_calc_time
     time_since_last_calc_secs = time_since_last_calc.total_seconds()
-    secs_pr_day = 24*60*60
-    s.expected_blocks_now = s.expected_blocks_today * time_since_last_calc_secs / secs_pr_day
+    secs_pr_round = round_time_hours * 60 * 60
+    s.expected_blocks_now = s.expected_blocks_this_round * time_since_last_calc_secs / secs_pr_round
 
     s.points = get_points(member_data)
     s.poolshare = get_pool_share(member_data)
     s.member_netspace = get_member_netspace(member_data)
-    s.payout_until_now = s.poolshare * s.blocks_today * 1.75
+    s.payout_until_now = s.poolshare * s.blocks_this_round * 1.75
 
-    time_remaining_days = 1 - (time_since_last_calc_secs / secs_pr_day)
-    expected_remaining_payout = time_remaining_days * s.expected_blocks_today * 1.75 * s.poolshare
+    time_remaining_days = 1 - (time_since_last_calc_secs / secs_pr_round)
+    expected_remaining_payout = time_remaining_days * s.expected_blocks_this_round * 1.75 * s.poolshare
     s.expected_next_payout = s.payout_until_now + expected_remaining_payout
-    s.profitability = 1024**4 * s.expected_next_payout / s.member_netspace
+    s.profitability = 24/round_time_hours * 1024**4 * s.expected_next_payout / s.member_netspace
     return s
 
 
