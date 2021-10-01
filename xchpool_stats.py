@@ -68,6 +68,14 @@ def get_points(memberdata):
     return points
 
 
+def get_last_earnings(memberdata, n):
+    payouts = memberdata['payouts']
+    earnings = payouts['earnings']
+    result = []
+    for i in range(n):
+        result.append(earnings[i])
+    return result
+
 def get_member_netspace(memberdata):
     netspace = int(memberdata['netspace'])
     return netspace
@@ -124,6 +132,17 @@ class stats:
         print(f'Expected next payout       : '
               f'{self.expected_next_payout:8.6f} XCH ({self.expected_next_payout * self.price:.2f} USD)')
         print(f'Estimated profitability    : {self.profitability:8.6f} XCH / TiB')
+
+        print('')
+        sum = 0
+        for i in range(4):
+            e = self.last_4_earnings[i]
+            sum += e['amount']
+        print(f'Last earnings              : {sum:8.6f} XCH ({sum * self.price:.2f} USD)')
+
+        for i in range(4):
+            e = self.last_4_earnings[i]
+            print(f'  {e["singleton"]:25s}: {e["amount"]:8.6f} XCH ({e["amount"] * self.price:.2f} USD)')
 
     def log(self, file):
         if not os.path.isfile(file):
@@ -198,6 +217,7 @@ def xchpool_stats(launcher_id):
     expected_remaining_payout = time_remaining_days * s.expected_blocks_this_round * 1.75 * s.poolshare
     s.expected_next_payout = s.payout_until_now + expected_remaining_payout
     s.profitability = 24/round_time_hours * 1024**4 * s.expected_next_payout / s.member_netspace
+    s.last_4_earnings = get_last_earnings(member_data, 4)
     return s
 
 
