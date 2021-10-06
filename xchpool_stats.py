@@ -26,15 +26,22 @@ class colored:
         return self.color + self.string + colored.END
 
 
-def read_launcher_id():
+def read_config():
+    class config:
+        pass
+
+    cfg = config()
     dir = os.path.dirname(__file__)
     file = os.path.join(dir, 'config.json')
     with open(file, 'r') as f:
         data = json.load(f)
-    launcher_id = data['launcher_id']
-    if launcher_id == 'your-launcher-id':
+    cfg.launcher_id = data['launcher_id']
+    if cfg.launcher_id == 'your-launcher-id':
         raise Error("Launcher ID not set in config.json")
-    return launcher_id
+
+    cfg.real_netspace = 1024**4 * float(data['real_netspace_tib'])
+
+    return cfg
 
 
 def get_json(url):
@@ -44,6 +51,30 @@ def get_json(url):
     data = resp.json()
     return data
 
+
+def post_json(url, req_json):
+    resp = requests.post(url=url, json=req_json)
+    if resp.status_code != requests.codes.ok:
+        raise Error(f"POST request failed: {url}")
+    data = resp.json()
+    return data
+
+
+def get_xch_pr_tib():
+    query = """
+    {
+        daily_stats(order_by: {date: desc}, limit: 1){
+            date
+            xch_per_tib
+        }
+    }
+    """
+    j = {
+        "query": query
+    }
+    resp = post_json('https://api.xchscan.com/v1/graphql', req_json=j)
+    data = resp['data']
+    return data
 
 def get_pool_stats():
     return get_json('https://api.xchpool.org/v1/poolstats')
@@ -68,13 +99,10 @@ def get_points(memberdata):
     return points
 
 
-def get_last_earnings(memberdata, n):
+def get_earnings(memberdata):
     payouts = memberdata['payouts']
     earnings = payouts['earnings']
-    result = []
-    for i in range(n):
-        result.append(earnings[i])
-    return result
+    return earnings
 
 def get_member_netspace(memberdata):
     netspace = int(memberdata['netspace'])
@@ -103,6 +131,13 @@ def format_bytes(bytes):
     return f'{bytes} B'
 
 
+def colored_percentage(perc):
+    perc_str = f'{perc:6.2f} %'
+    if perc >= 100:
+        return colored(perc_str, colored.GREEN)
+    else:
+        return colored(perc_str, colored.RED)
+
 class stats:
     def __init__(self, price):
         self.price = price
@@ -120,29 +155,73 @@ class stats:
         else:
             ahead_behind = colored('behind', colored.RED)
 
+        real_netspace_str = format_bytes(self.real_netspace)
+        member_netspace_str = format_bytes(self.member_netspace)
+        if self.member_netspace >= self.real_netspace:
+            member_netspace = colored(member_netspace_str, colored.GREEN)
+        else:
+            member_netspace = colored(member_netspace_str, colored.RED)
+
+        payout_until_now_str = f'{self.payout_until_now:8.6f}'
+        if self.payout_until_now >= self.expected_xch_pr_round:
+            payout_until_now_str = colored(payout_until_now_str, colored.GREEN)
+
+        expected_next_payout_str = f'{self.expected_next_payout:.6f}'
+        if self.expected_next_payout >= self.expected_xch_pr_round:
+            expected_next_payout_str = colored(expected_next_payout_str, colored.GREEN)
+        else:
+            expected_next_payout_str = colored(expected_next_payout_str, colored.RED)
+
+        profitability_str = f'{self.profitability:.6f}'
+        if self.profitability >= self.xch_pr_tib:
+            profitability_str = colored(profitability_str, colored.GREEN)
+        else:
+            profitability_str = colored(profitability_str, colored.RED)
+
         print(f'Blocks ahead / behind      : {diff:8.2f} ({ahead_behind})')
         print('')
+        print(f'Real netspace (from config): {real_netspace_str}')
+        print(f'Estimated member netspace  : {member_netspace}')
         print(f'Points                     : {self.points:8}')
-        print(f'Estimated member netspace  : {format_bytes(self.member_netspace)}')
         print(f'Poolshare                  : {(self.poolshare*100):8.6f} %')
         print('')
         print(f'Current price              : {self.price:8.2f} USD / XCH')
         print(f'Next payout until now      : '
-              f'{self.payout_until_now:8.6f} XCH ({self.payout_until_now * self.price:.2f} USD)')
+              f'{payout_until_now_str} XCH ({self.payout_until_now * self.price:.2f} USD)')
         print(f'Expected next payout       : '
-              f'{self.expected_next_payout:8.6f} XCH ({self.expected_next_payout * self.price:.2f} USD)')
-        print(f'Estimated profitability    : {self.profitability:8.6f} XCH / TiB')
+              f'{expected_next_payout_str} XCH ({self.expected_next_payout * self.price:.2f} USD)')
+        print(f'Estimated profitability    : {profitability_str} XCH / TiB')
+        print('')
+        print(f'Expected earning pr round  : {self.expected_xch_pr_round:8.6f} XCH / TiB')
+        print(f'Expected profitability     : {self.xch_pr_tib:8.6f} XCH / TiB ({self.xch_pr_tib_date})')
 
         print('')
+        n = 20
         sum = 0
-        for i in range(4):
-            e = self.last_4_earnings[i]
+        for i in range(n):
+            e = self.earnings[i]
             sum += e['amount']
-        print(f'Last earnings              : {sum:8.6f} XCH ({sum * self.price:.2f} USD)')
+        exp = self.expected_xch_pr_round * n
+        perc = 100*sum / exp
 
-        for i in range(4):
-            e = self.last_4_earnings[i]
-            print(f'  {e["singleton"]:25s}: {e["amount"]:8.6f} XCH ({e["amount"] * self.price:.2f} USD)')
+        print(f'Last {n:2} earnings           : '
+              f'{sum:.12f} XCH ({sum * self.price:5.2f} USD)'
+              f' ({colored_percentage(perc)})')
+
+        for i in range(n):
+            e = self.earnings[i]
+            state = e["state"]
+            transaction_id = e["transaction_id"]
+            if state == "paid":
+                paid = "("+transaction_id[:4]+")"
+            else:
+                paid = "(unpaid)"
+            amount = e["amount"]
+            perc = 100*amount / self.expected_xch_pr_round
+            print(f'  {e["singleton"]:17s}{paid:8s}:'
+                  f' {amount:.12f} XCH'
+                  f' ({e["amount"] * self.price:5.2f} USD)'
+                  f' ({colored_percentage(perc)})')
 
     def log(self, file):
         if not os.path.isfile(file):
@@ -185,12 +264,20 @@ class stats:
             f.write('\n')
 
 
-def xchpool_stats(launcher_id):
-    member_data = get_member_data(launcher_id)
+def xchpool_stats(cfg):
+    member_data = get_member_data(cfg.launcher_id)
     pool_stats = get_pool_stats()
     price = get_current_price()
+    xch_pr_tib_data = get_xch_pr_tib()
+    xch_pr_tib_data_element = xch_pr_tib_data['daily_stats'][-1]
+    xch_pr_tib = xch_pr_tib_data_element['xch_per_tib'] * 7 / 8
+    xch_pr_tib_date = xch_pr_tib_data_element['date']
 
     s = stats(price)
+    s.xch_pr_tib = xch_pr_tib
+    s.xch_pr_tib_date = xch_pr_tib_date
+    s.expected_xch_pr_round = (cfg.real_netspace / 1024**4) * xch_pr_tib * round_time_hours / 24
+
     s.total_space = pool_stats['blockchainTotalSpace']
     s.pool_space = pool_stats['poolCapacityBytes']
     s.blocks_this_round = pool_stats['blocksFoundSofarToday']
@@ -213,13 +300,14 @@ def xchpool_stats(launcher_id):
     s.points = get_points(member_data)
     s.poolshare = get_pool_share(member_data)
     s.member_netspace = get_member_netspace(member_data)
+    s.real_netspace = cfg.real_netspace
     s.payout_until_now = s.poolshare * s.blocks_this_round * 1.75
 
     time_remaining_days = 1 - (time_since_last_calc_secs / secs_pr_round)
     expected_remaining_payout = time_remaining_days * s.expected_blocks_this_round * 1.75 * s.poolshare
     s.expected_next_payout = s.payout_until_now + expected_remaining_payout
     s.profitability = 24/round_time_hours * 1024**4 * s.expected_next_payout / s.member_netspace
-    s.last_4_earnings = get_last_earnings(member_data, 4)
+    s.earnings = get_earnings(member_data)
     return s
 
 
@@ -228,8 +316,8 @@ if __name__ == "__main__":
     parser.add_argument('--log', dest='logfile', help='Log to LOGFILE')
     args = parser.parse_args()
     try:
-        launcher_id = read_launcher_id()
-        stats = xchpool_stats(launcher_id)
+        cfg = read_config()
+        stats = xchpool_stats(cfg)
     except Error as e:
         print("Error:", e)
         sys.exit(1)
