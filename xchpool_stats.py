@@ -196,7 +196,7 @@ class stats:
         print(f'Expected profitability     : {self.xch_pr_tib:8.6f} XCH / TiB ({self.xch_pr_tib_date})')
 
         print('')
-        n = 20
+        n = 7 * 24//round_time_hours
         sum = 0
         for i in range(n):
             e = self.earnings[i]
@@ -204,7 +204,7 @@ class stats:
         exp = self.expected_xch_pr_round * n
         perc = 100*sum / exp
 
-        print(f'Last {n:2} earnings           : '
+        print(f'Last 7d earnings           : '
               f'{sum:.12f} XCH ({sum * self.price:5.2f} USD)'
               f' ({colored_percentage(perc)})')
 
