@@ -148,7 +148,7 @@ class stats:
     def __init__(self, price):
         self.price = price
 
-    def print(self):
+    def print(self, n_days):
         print(f'Total netspace             : {format_bytes(self.total_space)}')
         print(f'Pool netspace              : {format_bytes(self.pool_space)}')
         print(f'Expected blocks this round : {self.expected_blocks_this_round:8.2f}')
@@ -202,7 +202,7 @@ class stats:
         print(f'Expected profitability     : {self.xch_pr_tib:8.6f} XCH / TiB ({self.xch_pr_tib_date})')
 
         print('')
-        n = 7 * 24//round_time_hours
+        n = n_days * 24//round_time_hours
         sum = 0
         for i in range(n):
             e = self.earnings[i]
@@ -210,7 +210,7 @@ class stats:
         exp = self.expected_xch_pr_round * n
         perc = 100*sum / exp
 
-        print(f'Last 7d earnings           : '
+        print(f'Last {n_days:2}d earnings          : '
               f'{sum:.12f} XCH ({sum * self.price:5.2f} USD)'
               f' ({colored_percentage(perc)})')
 
@@ -319,6 +319,7 @@ def xchpool_stats(cfg):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Extract metrics from XCHPool and calculate expected next payout')
+    parser.add_argument('--days', dest='days', help='Number of days to print')
     parser.add_argument('--log', dest='logfile', help='Log to LOGFILE')
     args = parser.parse_args()
     try:
@@ -328,6 +329,8 @@ if __name__ == "__main__":
         print("Error:", e)
         sys.exit(1)
 
-    stats.print()
+    days = int(args.days) if args.days else 7
+    stats.print(days)
+
     if args.logfile:
         stats.log(args.logfile)
