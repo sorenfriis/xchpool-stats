@@ -45,25 +45,31 @@ def read_config():
 
 
 def get_json(url):
-    resp = requests.get(url)
-    if resp.status_code != requests.codes.ok:
-        raise Error(f"GET request failed: {url}")
-    data = resp.json()
-    return data
+    try:
+        resp = requests.get(url)
+        if resp.status_code != requests.codes.ok:
+            raise Error(f"GET request failed: {url}")
+        data = resp.json()
+        return data
+    except requests.exceptions.ConnectionError as e:
+        raise Error(f'ConnectionError during GET from: {url}')
 
 
 def post_json(url, req_json):
-    resp = requests.post(url=url, json=req_json)
-    if resp.status_code != requests.codes.ok:
-        raise Error(f"POST request failed: {url}")
-    data = resp.json()
-    return data
+    try:
+        resp = requests.post(url=url, json=req_json)
+        if resp.status_code != requests.codes.ok:
+            raise Error(f"POST request failed: {url}")
+        data = resp.json()
+        return data
+    except ConnectionError as e:
+        raise Error(f'ConnectionError during POST to: {url}')
 
 
 def get_xch_pr_tib():
     query = """
     {
-        daily_stats(order_by: {date: desc}, limit: 1){
+        daily_stats(order_by: {date: desc}){
             date
             xch_per_tib
         }
@@ -269,7 +275,7 @@ def xchpool_stats(cfg):
     pool_stats = get_pool_stats()
     price = get_current_price()
     xch_pr_tib_data = get_xch_pr_tib()
-    xch_pr_tib_data_element = xch_pr_tib_data['daily_stats'][-1]
+    xch_pr_tib_data_element = xch_pr_tib_data['daily_stats'][0]
     xch_pr_tib = xch_pr_tib_data_element['xch_per_tib'] * 7 / 8
     xch_pr_tib_date = xch_pr_tib_data_element['date']
 
