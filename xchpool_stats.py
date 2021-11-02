@@ -91,8 +91,8 @@ def get_member_data(launcher_id):
 
 
 def get_current_price():
-    data = get_json('https://api.chiaprofitability.com/market')
-    return float(data['price'])
+    data = get_json('https://xchscan.com/api/chia-price')
+    return float(data['usd'])
 
 
 def get_pool_share(memberdata):
