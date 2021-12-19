@@ -44,26 +44,30 @@ def read_config():
     return cfg
 
 
-def get_json(url):
+def get_json(url, timeout=5):
     try:
-        resp = requests.get(url)
+        resp = requests.get(url, timeout=timeout)
         if resp.status_code != requests.codes.ok:
             raise Error(f"GET request failed: {url}")
         data = resp.json()
         return data
     except requests.exceptions.ConnectionError as e:
         raise Error(f'ConnectionError during GET from: {url}')
+    except requests.exceptions.Timeout: 
+        raise Error(f'Timeout during GET from: {url}')
 
 
-def post_json(url, req_json):
+def post_json(url, req_json, timeout=5):
     try:
-        resp = requests.post(url=url, json=req_json)
+        resp = requests.post(url=url, json=req_json, timeout=timeout)
         if resp.status_code != requests.codes.ok:
             raise Error(f"POST request failed: {url}")
         data = resp.json()
         return data
     except ConnectionError as e:
         raise Error(f'ConnectionError during POST to: {url}')
+    except requests.exceptions.Timeout:
+        raise Error(f'Timeout during POST to: {url}')
 
 
 def get_xch_pr_tib():
@@ -91,9 +95,19 @@ def get_member_data(launcher_id):
 
 
 def get_current_price():
-    data = get_json('https://xchscan.com/api/chia-price')
-    return float(data['usd'])
-
+    try:
+        data = get_json('https://api.coingecko.com/api/v3/simple/price?ids=chia&vs_currencies=usd')
+        price = float(data['chia']['usd'])
+        return price
+    except Error:
+        pass
+    
+    try:
+        data = get_json('https://xchscan.com/api/chia-price')
+        price = float(data['usd'])
+        return price
+    except Error:
+        raise 
 
 def get_pool_share(memberdata):
     poolshare = float(memberdata['currentPoolShare'])
